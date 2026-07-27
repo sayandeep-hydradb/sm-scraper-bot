@@ -15,9 +15,8 @@ export class Logger {
     if (levelIndex(level) < levelIndex(this.minLevel)) return;
     const prefix = `[${new Date().toISOString()}] [${level.toUpperCase()}] [${this.scope}]`;
     const line = meta ? `${prefix} ${message} ${JSON.stringify(meta)}` : `${prefix} ${message}`;
-    if (level === 'error') console.error(line);
-    else if (level === 'warn') console.warn(line);
-    else console.log(line);
+    // All levels go to stderr, keeping stdout free for structured command output (e.g. the daily scraper's JSON array).
+    console.error(line);
   }
 
   debug(message: string, meta?: Record<string, unknown>): void {

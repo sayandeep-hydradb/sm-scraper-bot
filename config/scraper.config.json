@@ -1,0 +1,32 @@
+{
+  "lookbackHours": 24,
+  "platforms": {
+    "reddit": true,
+    "twitter": true,
+    "hackernews": true,
+    "devto": true,
+    "medium": true,
+    "substack": true
+  },
+  "keywords": [
+    "microsoft graphrag",
+    "graphiti github",
+    "neo4j alternatives",
+    "graph database for ai",
+    "memory for ai",
+    "context retrieval",
+    "vector database limitations",
+    "knowledge graph",
+    "graph enhanced retrieval"
+  ],
+  "search": {
+    "maxItemsPerKeyword": 25,
+    "sort": "new"
+  },
+  "scoring": {
+    "keywordMatchWeight": 10,
+    "titleMatchBonus": 5,
+    "engagementWeight": 0.05,
+    "recencyWeight": 2
+  }
+}
