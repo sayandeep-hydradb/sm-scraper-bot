@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/cli.ts",
-    "scrape": "tsx src/cli.ts",
+    "scrape": "tsx src/pipeline/runDaily.ts",
     "typecheck": "tsc --noEmit",
     "start": "node dist/cli.js"
   },

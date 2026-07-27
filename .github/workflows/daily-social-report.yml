@@ -1,0 +1,58 @@
+name: Daily Social Report
+
+on:
+  schedule:
+    # 04:30 UTC = 10:00 IST
+    - cron: '30 4 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  scrape:
+    name: Run daily scraper
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Verify required secrets are configured
+        env:
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+        run: |
+          missing=()
+          [ -z "$APIFY_API_TOKEN" ] && missing+=("APIFY_API_TOKEN")
+          if [ "${#missing[@]}" -ne 0 ]; then
+            printf '::error::Missing required GitHub secrets: %s\n' "${missing[*]}"
+            exit 1
+          fi
+          echo "All required secrets are present."
+
+      - name: Run daily scraper
+        env:
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+          DEVTO_API_KEY: ${{ secrets.DEVTO_API_KEY }}
+          REDDIT_ACTOR_ID: ${{ secrets.REDDIT_ACTOR_ID }}
+          TWITTER_ACTOR_ID: ${{ secrets.TWITTER_ACTOR_ID }}
+          MEDIUM_ACTOR_ID: ${{ secrets.MEDIUM_ACTOR_ID }}
+          SUBSTACK_ACTOR_ID: ${{ secrets.SUBSTACK_ACTOR_ID }}
+          LOG_LEVEL: info
+        run: npm run scrape
+
+      - name: Upload scraper output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-scraper-result
+          path: output/daily-scraper-result.json
+          if-no-files-found: warn
+          retention-days: 14

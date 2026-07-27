@@ -31,7 +31,7 @@ export function sortPosts(posts: Post[], sort?: SortOrder): Post[] {
   }
 }
 
-function engagementScore(post: Post): number {
+export function engagementScore(post: Post): number {
   const e = post.engagement;
   return (e.score ?? 0) + (e.upvotes ?? 0) + (e.likes ?? 0) + (e.comments ?? 0) * 0.5;
 }

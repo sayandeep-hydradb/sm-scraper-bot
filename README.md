@@ -7,11 +7,10 @@ Self-contained social media scraping toolkit. Scrape **Reddit, X (Twitter), Hack
 ```bash
 npm install
 cp .env.example .env      # then fill in APIFY_API_TOKEN (see below)
-npm run build
-npm run scrape -- hackernews latest --limit 10
+npm run scrape             # runs the full daily pipeline (see "Daily pipeline" below)
 ```
 
-Or run straight from TypeScript during development:
+`npm run scrape` runs the complete daily pipeline (`runDailyScraper()`), not the single-platform CLI. For ad hoc single-platform exploration during development, use the CLI directly:
 
 ```bash
 npm run dev -- devto search "rust" --limit 5
@@ -59,6 +58,42 @@ import { scraperService } from './src/index.js';
 const { items } = await scraperService.search('hackernews', { query: 'rust', limit: 10 });
 ```
 
+## Daily pipeline
+
+`npm run scrape` (or `import { runDailyScraper } from './src/index.js'`) runs the full pipeline:
+
+1. Runs every **enabled** platform's search for every configured **keyword**.
+2. Merges all results across platforms.
+3. Removes duplicate posts (by platform + id).
+4. Filters to posts published within the last `lookbackHours` (default 24).
+5. Scores each remaining post against the configured keywords/weights.
+6. Sorts by score, descending.
+7. Returns the sorted array (also written to `output/daily-scraper-result.json`).
+
+If one platform or keyword search fails, it's logged and skipped — the rest of the pipeline keeps running.
+
+All of this is configured in **`config/scraper.config.json`** — no code changes needed to tune it:
+
+```json
+{
+  "lookbackHours": 24,
+  "platforms": { "reddit": true, "twitter": true, "hackernews": true, "devto": true, "medium": true, "substack": true },
+  "keywords": ["microsoft graphrag", "graphiti github", "neo4j alternatives", "graph database for ai", "..."],
+  "search": { "maxItemsPerKeyword": 25, "sort": "new" },
+  "scoring": { "keywordMatchWeight": 10, "titleMatchBonus": 5, "engagementWeight": 0.05, "recencyWeight": 2 }
+}
+```
+
+- `platforms` — set any platform to `false` to disable it for the daily run.
+- `keywords` — searched against every enabled platform; also what posts are scored against.
+- `scoring` — `keywordMatchWeight`/`titleMatchBonus` reward keyword matches (title matches get an extra bonus), `engagementWeight` rewards likes/upvotes/comments, `recencyWeight` rewards newer posts.
+
+## Running on a schedule (GitHub Actions)
+
+`.github/workflows/daily-social-report.yml` runs `npm run scrape` daily at 04:30 UTC (10:00 IST), and can also be triggered manually from the Actions tab (`workflow_dispatch`). It fails clearly (before scraping anything) if required secrets aren't configured on the repo.
+
+Required repo secrets: `APIFY_API_TOKEN`. Optional: `DEVTO_API_KEY`, `REDDIT_ACTOR_ID`, `TWITTER_ACTOR_ID`, `MEDIUM_ACTOR_ID`, `SUBSTACK_ACTOR_ID` (actor overrides). The run's output JSON is uploaded as a workflow artifact (`daily-scraper-result`).
+
 ## Architecture
 
 ```
@@ -73,7 +108,11 @@ src/
       mapper.ts  - normalizes the raw source payload into core/types.ts shapes
   services/
     scraperService.ts   platform-agnostic facade used by the CLI (and anything else)
-  cli.ts           terminal entrypoint
+  pipeline/
+    runDailyScraper.ts  the daily orchestration entry point (fan-out, dedupe, filter, score, sort)
+    runDaily.ts         CLI entrypoint for `npm run scrape` (writes output/daily-scraper-result.json)
+    dedupe.ts / recencyFilter.ts / scoring.ts   pipeline building blocks
+  cli.ts           single-platform terminal entrypoint (`npm run dev -- <platform> <command>`)
   index.ts         library entrypoint
 ```
 
@@ -98,6 +137,8 @@ All secrets and tunables live in `.env` (see `.env.example`). Nothing is hardcod
 - `DEFAULT_TIMEOUT_MS`, `DEFAULT_MAX_RETRIES`, `DEFAULT_RETRY_BASE_DELAY_MS` — HTTP resilience knobs
 - `RATE_LIMIT_PER_MINUTE` — per-provider request budget
 - `APIFY_POLL_INTERVAL_MS`, `APIFY_RUN_TIMEOUT_MS` — Apify run behavior
+
+Keywords, scoring weights, and platform enable/disable flags for the daily pipeline live separately in `config/scraper.config.json` (see "Daily pipeline" above), overridable via `SCRAPER_CONFIG_PATH`.
 
 ## Known limitations (read before relying on this in production)
 
