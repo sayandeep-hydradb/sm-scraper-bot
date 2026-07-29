@@ -105,4 +105,28 @@ export class RedditProvider implements ScraperProvider {
     );
     return paginateArray(items.map(mapToPost), options);
   }
+
+  /**
+   * Pulls recent posts directly from named subreddits (sorted by New), instead of
+   * keyword search. Reddit's keyword search caps out around ~1,000 results and its
+   * comment index is degraded, whereas a named subreddit sorted by New pages through
+   * its full history — so this is the recommended way to get volume from this actor.
+   * Relevance filtering happens later in the pipeline via keyword scoring.
+   */
+  async fetchFromSubreddits(subreddits: string[], options: { lookbackHours?: number; maxItems?: number } = {}): Promise<Post[]> {
+    if (subreddits.length === 0) return [];
+    const maxItems = options.maxItems ?? 300;
+    const items = await runReddit(
+      {
+        subreddits,
+        sort: 'new',
+        postDateLimit: options.lookbackHours ? `${options.lookbackHours} hours` : undefined,
+        maxItems,
+        skipCommunityInfo: true,
+        skipComments: true,
+      },
+      maxItems,
+    );
+    return items.filter((item) => item['recordType'] === 'post').map(mapToPost);
+  }
 }

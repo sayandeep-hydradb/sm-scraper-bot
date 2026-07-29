@@ -12,16 +12,33 @@
     "microsoft graphrag",
     "graphiti github",
     "neo4j alternatives",
-    "graph database for ai",
+    "rag system architecture",
+    "graph database advantages",
     "memory for ai",
     "context retrieval",
-    "vector database limitations",
-    "knowledge graph",
-    "graph enhanced retrieval"
+    "mem0 alternative",
+    "aws neptune alternatives",
+    "zep alternative",
+    "graph rag architecture",
+    "context graph",
+    "ai memory",
+    "graph clustering algorithms",
+    "graph database vs relational database",
+    "agent memory architecture",
+    "graph database for ai",
+    "when to use graph database",
+    "index-free adjacency graph database",
+    "long-term memory for llms",
+    "relational graph database",
+    "vector database limitations"
   ],
   "search": {
     "maxItemsPerKeyword": 25,
     "sort": "new"
+  },
+  "reddit": {
+    "subreddits": ["AI_Agents", "LLMDevs", "LocalLLaMA", "MachineLearning", "Rag", "selfhosted", "vectordatabase"],
+    "maxItems": 300
   },
   "scoring": {
     "keywordMatchWeight": 10,

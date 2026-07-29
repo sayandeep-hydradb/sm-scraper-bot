@@ -1,6 +1,7 @@
 import { config } from '../config/env.js';
 import { scraperConfig } from '../config/scraperConfig.js';
 import type { Platform, Post } from '../core/types.js';
+import { RedditProvider } from '../providers/reddit/index.js';
 import { scraperService } from '../services/scraperService.js';
 import { Logger } from '../utils/logger.js';
 import { dedupePosts } from './dedupe.js';
@@ -10,14 +11,37 @@ import { scorePost, type ScoredPost } from './scoring.js';
 export type { ScoredPost } from './scoring.js';
 
 const logger = new Logger('daily-scraper', config.logLevel);
+const redditProvider = new RedditProvider();
 
 function enabledPlatforms(): Platform[] {
   return scraperService.listPlatforms().filter((platform) => scraperConfig.platforms[platform] !== false);
 }
 
+/**
+ * Reddit is fetched by pulling recent posts from named subreddits (sorted by New)
+ * instead of per-keyword search — see `RedditProvider.fetchFromSubreddits` for why.
+ * Relevance is determined later by the shared keyword-scoring step, same as every
+ * other platform.
+ */
+async function runRedditScraper(): Promise<Post[]> {
+  const subreddits = scraperConfig.reddit?.subreddits ?? [];
+  const posts = await redditProvider.fetchFromSubreddits(subreddits, {
+    lookbackHours: scraperConfig.lookbackHours,
+    maxItems: scraperConfig.reddit?.maxItems,
+  });
+  return posts;
+}
+
 /** Runs every configured keyword search for one platform, tolerating per-keyword failures. */
 async function runPlatformScraper(platform: Platform): Promise<Post[]> {
   logger.info('scraper started', { platform });
+
+  if (platform === 'reddit') {
+    const posts = await runRedditScraper();
+    logger.info('scraper completed', { platform, postsCollected: posts.length });
+    return posts;
+  }
+
   const collected: Post[] = [];
 
   for (const keyword of scraperConfig.keywords) {
