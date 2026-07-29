@@ -11,6 +11,10 @@ export interface ScraperConfig {
     maxItemsPerKeyword: number;
     sort: SortOrder;
   };
+  reddit?: {
+    subreddits: string[];
+    maxItems: number;
+  };
   scoring: {
     keywordMatchWeight: number;
     titleMatchBonus: number;

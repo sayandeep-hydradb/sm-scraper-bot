@@ -20,7 +20,7 @@ export const config = {
     runTimeoutMs: int('APIFY_RUN_TIMEOUT_MS', 120_000),
   },
   actors: {
-    reddit: process.env.REDDIT_ACTOR_ID || 'trudax/reddit-scraper',
+    reddit: process.env.REDDIT_ACTOR_ID || 'solidcode/reddit-scraper',
     twitter: process.env.TWITTER_ACTOR_ID || 'apidojo/tweet-scraper',
     medium: process.env.MEDIUM_ACTOR_ID || 'easyapi/medium-posts-search-scraper',
     substack: process.env.SUBSTACK_ACTOR_ID || 'easyapi/substack-posts-scraper',
