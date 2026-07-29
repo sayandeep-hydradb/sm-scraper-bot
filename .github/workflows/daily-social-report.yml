@@ -53,6 +53,22 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: daily-scraper-result
-          path: output/daily-scraper-result.json
+          path: |
+            output/daily-scraper-result.json
+            output/daily-scraper-result.xlsx
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Email daily report
+        if: success()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.GMAIL_ADDRESS }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          from: Daily Social Report <${{ secrets.GMAIL_ADDRESS }}>
+          to: sayandeep@hydradb.com, reachsayandeep@gmail.com
+          subject: Daily Social Report - ${{ github.run_id }}
+          body: Attached is today's daily social report (one sheet per platform).
+          attachments: output/daily-scraper-result.xlsx
