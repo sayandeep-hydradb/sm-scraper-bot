@@ -18,6 +18,20 @@ const redditProvider = new RedditProvider();
  *  roughly constant as the keyword list grows, instead of scaling linearly with
  *  it (which is what caused runs to exceed the job timeout after keywords 9 -> 22). */
 const KEYWORD_CONCURRENCY = 5;
+const DEFAULT_MAX_POSTS_PER_PLATFORM = 25;
+
+/** Keeps only each platform's top-scoring posts, so a keyword/subreddit list wide
+ *  enough to surface good results doesn't also mean hundreds of posts to read daily. */
+function capPerPlatform(posts: ScoredPost[], maxPerPlatform: number): ScoredPost[] {
+  const countByPlatform = new Map<Platform, number>();
+  const capped = posts.filter((post) => {
+    const count = countByPlatform.get(post.platform) ?? 0;
+    if (count >= maxPerPlatform) return false;
+    countByPlatform.set(post.platform, count + 1);
+    return true;
+  });
+  return capped;
+}
 
 function enabledPlatforms(): Platform[] {
   return scraperService.listPlatforms().filter((platform) => scraperConfig.platforms[platform] !== false);
@@ -107,7 +121,11 @@ export async function runDailyScraper(): Promise<ScoredPost[]> {
   });
   scored.sort((a, b) => b.score - a.score);
 
-  logger.info('daily scraper finished', { finalPostCount: scored.length });
+  const maxPerPlatform = scraperConfig.output?.maxPostsPerPlatform ?? DEFAULT_MAX_POSTS_PER_PLATFORM;
+  const capped = capPerPlatform(scored, maxPerPlatform);
+  logger.info('capped to top posts per platform', { maxPerPlatform, remaining: capped.length });
 
-  return scored;
+  logger.info('daily scraper finished', { finalPostCount: capped.length });
+
+  return capped;
 }

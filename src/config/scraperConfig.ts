@@ -15,6 +15,9 @@ export interface ScraperConfig {
     subreddits: string[];
     maxItems: number;
   };
+  output?: {
+    maxPostsPerPlatform: number;
+  };
   scoring: {
     keywordMatchWeight: number;
     titleMatchBonus: number;
