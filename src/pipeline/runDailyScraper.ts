@@ -3,6 +3,7 @@ import { scraperConfig } from '../config/scraperConfig.js';
 import type { Platform, Post } from '../core/types.js';
 import { RedditProvider } from '../providers/reddit/index.js';
 import { scraperService } from '../services/scraperService.js';
+import { mapWithConcurrency } from '../utils/concurrency.js';
 import { Logger } from '../utils/logger.js';
 import { dedupePosts } from './dedupe.js';
 import { filterLast24Hours } from './recencyFilter.js';
@@ -12,6 +13,11 @@ export type { ScoredPost } from './scoring.js';
 
 const logger = new Logger('daily-scraper', config.logLevel);
 const redditProvider = new RedditProvider();
+
+/** How many keyword searches run in parallel per platform. Keeps wall-clock time
+ *  roughly constant as the keyword list grows, instead of scaling linearly with
+ *  it (which is what caused runs to exceed the job timeout after keywords 9 -> 22). */
+const KEYWORD_CONCURRENCY = 5;
 
 function enabledPlatforms(): Platform[] {
   return scraperService.listPlatforms().filter((platform) => scraperConfig.platforms[platform] !== false);
@@ -42,24 +48,24 @@ async function runPlatformScraper(platform: Platform): Promise<Post[]> {
     return posts;
   }
 
-  const collected: Post[] = [];
-
-  for (const keyword of scraperConfig.keywords) {
+  const results = await mapWithConcurrency(scraperConfig.keywords, KEYWORD_CONCURRENCY, async (keyword) => {
     try {
       const { items } = await scraperService.search(platform, {
         query: keyword,
         limit: scraperConfig.search.maxItemsPerKeyword,
         sort: scraperConfig.search.sort,
       });
-      collected.push(...items);
+      return items;
     } catch (error) {
       logger.error('scraper failed', {
         platform,
         keyword,
         error: error instanceof Error ? error.message : String(error),
       });
+      return [];
     }
-  }
+  });
+  const collected = results.flat();
 
   logger.info('scraper completed', { platform, postsCollected: collected.length });
   return collected;
@@ -73,19 +79,19 @@ async function runPlatformScraper(platform: Platform): Promise<Post[]> {
  */
 export async function runDailyScraper(): Promise<ScoredPost[]> {
   const platforms = enabledPlatforms();
-  const allPosts: Post[] = [];
 
-  for (const platform of platforms) {
+  const perPlatformResults = await mapWithConcurrency(platforms, platforms.length, async (platform) => {
     try {
-      const items = await runPlatformScraper(platform);
-      allPosts.push(...items);
+      return await runPlatformScraper(platform);
     } catch (error) {
       logger.error('scraper crashed', {
         platform,
         error: error instanceof Error ? error.message : String(error),
       });
+      return [];
     }
-  }
+  });
+  const allPosts = perPlatformResults.flat();
 
   logger.info('collection complete', { totalPostsCollected: allPosts.length });
 
