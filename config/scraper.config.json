@@ -40,6 +40,9 @@
     "subreddits": ["AI_Agents", "LLMDevs", "LocalLLaMA", "MachineLearning", "Rag", "selfhosted", "vectordatabase"],
     "maxItems": 300
   },
+  "output": {
+    "maxPostsPerPlatform": 25
+  },
   "scoring": {
     "keywordMatchWeight": 10,
     "titleMatchBonus": 5,
