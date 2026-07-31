@@ -2,6 +2,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { ScraperError } from '../core/errors.js';
+import { sendSlackNotification } from '../services/slackNotifier.js';
 import { buildXlsxReport } from './exportXlsx.js';
 import { runDailyScraper } from './runDailyScraper.js';
 
@@ -17,6 +18,10 @@ async function main(): Promise<void> {
 
   const xlsx = await buildXlsxReport(posts);
   writeFileSync(XLSX_OUTPUT_PATH, xlsx);
+
+  await sendSlackNotification(posts).catch((err) => {
+    console.error('Slack notification error (non-fatal):', err instanceof Error ? err.message : err);
+  });
 
   console.log(json);
 }

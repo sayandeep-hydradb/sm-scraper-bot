@@ -43,6 +43,9 @@ export const config = {
   rateLimit: {
     perMinute: int('RATE_LIMIT_PER_MINUTE', 60),
   },
+  slack: {
+    webhookUrl: process.env.SLACK_WEBHOOK_URL ?? '',
+  },
   logLevel: (process.env.LOG_LEVEL as LogLevel) || 'info',
 };
 
