@@ -45,6 +45,7 @@ jobs:
           TWITTER_ACTOR_ID: ${{ secrets.TWITTER_ACTOR_ID }}
           MEDIUM_ACTOR_ID: ${{ secrets.MEDIUM_ACTOR_ID }}
           SUBSTACK_ACTOR_ID: ${{ secrets.SUBSTACK_ACTOR_ID }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           LOG_LEVEL: info
         run: npm run scrape
 
