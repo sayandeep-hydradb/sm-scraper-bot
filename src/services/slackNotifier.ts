@@ -27,13 +27,19 @@ function truncate(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
 }
 
-function formatDate(): string {
-  return new Date().toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
+function formatDateTime(): string {
+  return (
+    new Date().toLocaleString('en-US', {
+      timeZone: 'Asia/Kolkata',
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    }) + ' IST'
+  );
 }
 
 export async function sendSlackNotification(posts: ScoredPost[]): Promise<void> {
@@ -66,7 +72,7 @@ export async function sendSlackNotification(posts: ScoredPost[]): Promise<void> 
   const blocks = [
     {
       type: 'header',
-      text: { type: 'plain_text', text: `📊 Daily Social Report — ${formatDate()}`, emoji: true },
+      text: { type: 'plain_text', text: `📊 Social Report — ${formatDateTime()}`, emoji: true },
     },
     {
       type: 'section',
@@ -85,7 +91,7 @@ export async function sendSlackNotification(posts: ScoredPost[]): Promise<void> 
     },
     {
       type: 'context',
-      elements: [{ type: 'mrkdwn', text: 'Full report attached to the daily email • sm-scraper-bot' }],
+      elements: [{ type: 'mrkdwn', text: 'Full report attached to the email • sm-scraper-bot' }],
     },
   ];
 
