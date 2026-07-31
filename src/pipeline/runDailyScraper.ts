@@ -6,7 +6,7 @@ import { scraperService } from '../services/scraperService.js';
 import { mapWithConcurrency } from '../utils/concurrency.js';
 import { Logger } from '../utils/logger.js';
 import { dedupePosts } from './dedupe.js';
-import { filterLast24Hours } from './recencyFilter.js';
+import { filterByLookbackHours } from './recencyFilter.js';
 import { scorePost, type ScoredPost } from './scoring.js';
 
 export type { ScoredPost } from './scoring.js';
@@ -18,7 +18,7 @@ const redditProvider = new RedditProvider();
  *  roughly constant as the keyword list grows, instead of scaling linearly with
  *  it (which is what caused runs to exceed the job timeout after keywords 9 -> 22). */
 const KEYWORD_CONCURRENCY = 5;
-const DEFAULT_MAX_POSTS_PER_PLATFORM = 25;
+const DEFAULT_MAX_POSTS_PER_PLATFORM = 75;
 
 /** Keeps only each platform's top-scoring posts, so a keyword/subreddit list wide
  *  enough to surface good results doesn't also mean hundreds of posts to read daily. */
@@ -112,7 +112,7 @@ export async function runDailyScraper(): Promise<ScoredPost[]> {
   const { unique, duplicatesRemoved } = dedupePosts(allPosts);
   logger.info('duplicates removed', { duplicatesRemoved, remaining: unique.length });
 
-  const recent = filterLast24Hours(unique, scraperConfig.lookbackHours);
+  const recent = filterByLookbackHours(unique, scraperConfig.lookbackHours);
   logger.info('recency filter applied', { lookbackHours: scraperConfig.lookbackHours, remaining: recent.length });
 
   const scored: ScoredPost[] = recent.map((post) => {

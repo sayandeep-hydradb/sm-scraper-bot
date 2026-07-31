@@ -5,7 +5,7 @@ import type { Post } from '../core/types.js';
  * Posts with a missing or unparseable date are dropped — recency can't be
  * confirmed for them, so they're excluded rather than assumed to pass.
  */
-export function filterLast24Hours(posts: Post[], lookbackHours: number): Post[] {
+export function filterByLookbackHours(posts: Post[], lookbackHours: number): Post[] {
   const cutoffMs = Date.now() - lookbackHours * 60 * 60 * 1000;
   return posts.filter((post) => {
     if (!post.publishedAt) return false;

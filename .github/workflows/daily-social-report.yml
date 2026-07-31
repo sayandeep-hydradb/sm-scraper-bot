@@ -1,14 +1,16 @@
-name: Daily Social Report
+name: Social Report (Every 12 Hours)
 
 on:
   schedule:
-    # 04:30 UTC = 10:00 IST
-    - cron: '30 4 * * *'
+    # 02:30 UTC = 08:00 IST
+    - cron: '30 2 * * *'
+    # 14:30 UTC = 20:00 IST
+    - cron: '30 14 * * *'
   workflow_dispatch: {}
 
 jobs:
   scrape:
-    name: Run daily scraper
+    name: Run scraper
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -37,7 +39,7 @@ jobs:
           fi
           echo "All required secrets are present."
 
-      - name: Run daily scraper
+      - name: Run scraper
         env:
           APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
           DEVTO_API_KEY: ${{ secrets.DEVTO_API_KEY }}
@@ -53,14 +55,14 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: daily-scraper-result
+          name: scraper-result
           path: |
             output/daily-scraper-result.json
             output/daily-scraper-result.xlsx
           if-no-files-found: warn
           retention-days: 14
 
-      - name: Email daily report
+      - name: Email report
         if: success()
         uses: dawidd6/action-send-mail@v3
         with:
@@ -68,8 +70,8 @@ jobs:
           server_port: 465
           username: ${{ secrets.GMAIL_ADDRESS }}
           password: ${{ secrets.GMAIL_APP_PASSWORD }}
-          from: Daily Social Report <${{ secrets.GMAIL_ADDRESS }}>
+          from: Social Report <${{ secrets.GMAIL_ADDRESS }}>
           to: sayandeep@hydradb.com, reachsayandeep@gmail.com
-          subject: Daily Social Report - ${{ github.run_id }}
-          body: Attached is today's daily social report (one sheet per platform).
+          subject: Social Report (12h) - ${{ github.run_id }}
+          body: Attached is the latest 12-hour social report (one sheet per platform).
           attachments: output/daily-scraper-result.xlsx

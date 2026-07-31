@@ -1,5 +1,5 @@
 {
-  "lookbackHours": 24,
+  "lookbackHours": 12,
   "platforms": {
     "reddit": true,
     "twitter": true,
@@ -41,7 +41,7 @@
     "maxItems": 300
   },
   "output": {
-    "maxPostsPerPlatform": 25
+    "maxPostsPerPlatform": 75
   },
   "scoring": {
     "keywordMatchWeight": 10,

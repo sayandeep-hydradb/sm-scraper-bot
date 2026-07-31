@@ -65,7 +65,7 @@ const { items } = await scraperService.search('hackernews', { query: 'rust', lim
 1. Runs every **enabled** platform's search for every configured **keyword**.
 2. Merges all results across platforms.
 3. Removes duplicate posts (by platform + id).
-4. Filters to posts published within the last `lookbackHours` (default 24).
+4. Filters to posts published within the last `lookbackHours` (default 12).
 5. Scores each remaining post against the configured keywords/weights.
 6. Sorts by score, descending.
 7. Returns the sorted array (also written to `output/daily-scraper-result.json`).
@@ -76,7 +76,7 @@ All of this is configured in **`config/scraper.config.json`** — no code change
 
 ```json
 {
-  "lookbackHours": 24,
+  "lookbackHours": 12,
   "platforms": { "reddit": true, "twitter": true, "hackernews": true, "devto": true, "medium": true, "substack": true },
   "keywords": ["microsoft graphrag", "graphiti github", "neo4j alternatives", "graph database for ai", "..."],
   "search": { "maxItemsPerKeyword": 25, "sort": "new" },
@@ -90,9 +90,9 @@ All of this is configured in **`config/scraper.config.json`** — no code change
 
 ## Running on a schedule (GitHub Actions)
 
-`.github/workflows/daily-social-report.yml` runs `npm run scrape` daily at 04:30 UTC (10:00 IST), and can also be triggered manually from the Actions tab (`workflow_dispatch`). It fails clearly (before scraping anything) if required secrets aren't configured on the repo.
+`.github/workflows/daily-social-report.yml` runs `npm run scrape` twice a day — at 02:30 UTC and 14:30 UTC (08:00 IST and 20:00 IST) — and can also be triggered manually from the Actions tab (`workflow_dispatch`). It fails clearly (before scraping anything) if required secrets aren't configured on the repo.
 
-Required repo secrets: `APIFY_API_TOKEN`. Optional: `DEVTO_API_KEY`, `REDDIT_ACTOR_ID`, `TWITTER_ACTOR_ID`, `MEDIUM_ACTOR_ID`, `SUBSTACK_ACTOR_ID` (actor overrides). The run's output JSON is uploaded as a workflow artifact (`daily-scraper-result`).
+Required repo secrets: `APIFY_API_TOKEN`. Optional: `DEVTO_API_KEY`, `REDDIT_ACTOR_ID`, `TWITTER_ACTOR_ID`, `MEDIUM_ACTOR_ID`, `SUBSTACK_ACTOR_ID` (actor overrides). The run's output JSON is uploaded as a workflow artifact (`scraper-result`).
 
 ## Architecture
 
