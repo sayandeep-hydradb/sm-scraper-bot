@@ -9,8 +9,40 @@ import { flattenComments, mapToAuthor, mapToPost, type DevtoArticle, type DevtoC
 
 const { baseUrl, apiKey } = config.devto;
 
+// Dev.to tags that reliably surface content relevant to graph databases, AI memory, and RAG.
+// dev.to has no full-text search API, so we fetch recent articles by tag and let the
+// pipeline's keyword-scoring step determine relevance — same strategy as Reddit subreddits.
+const DEVTO_TAGS = ['database', 'ai', 'machinelearning', 'llm', 'rag', 'neo4j', 'vectordatabase', 'python'];
+
+// Cached per process run so 22 keyword calls share one set of HTTP fetches.
+let tagArticleCache: DevtoArticle[] | null = null;
+
 function headers(): Record<string, string> {
   return apiKey ? { 'api-key': apiKey } : {};
+}
+
+async function fetchTagPool(): Promise<DevtoArticle[]> {
+  if (tagArticleCache) return tagArticleCache;
+  const perTag = await Promise.all(
+    DEVTO_TAGS.map((tag) =>
+      getJson<DevtoArticle[]>(`${baseUrl}/articles?tag=${tag}&per_page=30`, {
+        platform: 'devto',
+        headers: headers(),
+      }).catch(() => [] as DevtoArticle[]),
+    ),
+  );
+  const seen = new Set<number>();
+  const pool: DevtoArticle[] = [];
+  for (const articles of perTag) {
+    for (const a of articles) {
+      if (!seen.has(a.id)) {
+        seen.add(a.id);
+        pool.push(a);
+      }
+    }
+  }
+  tagArticleCache = pool;
+  return pool;
 }
 
 function parseArticleRef(urlOrId: string): { id?: string; usernameSlug?: string } {
@@ -33,23 +65,16 @@ export class DevtoProvider implements ScraperProvider {
   readonly platform = 'devto' as const;
 
   /**
-   * dev.to's public API has no full-text search endpoint, so we pull a pool
-   * of recent/top articles (optionally scoped by tag, when the query looks
-   * like one) and filter client-side by title/description match.
+   * dev.to has no full-text search API. We fetch a pool of recent articles
+   * from topic-relevant tags (cached per process) and return the whole pool
+   * so the pipeline's keyword-scoring step can determine relevance. The
+   * pipeline's capPerPlatform(75) handles the final cut-off.
    */
   async search(options: SearchOptions): Promise<PaginatedResult<Post>> {
-    const pool = await getJson<DevtoArticle[]>(
-      `${baseUrl}/articles?per_page=100&top=30`,
-      { platform: 'devto', headers: headers() },
-    );
-    const needle = options.query.toLowerCase();
-    const matches = pool.filter((a) => {
-      const tags = Array.isArray(a.tag_list) ? a.tag_list : (a.tag_list ?? '').split(',').map((t) => t.trim());
-      return a.title.toLowerCase().includes(needle) || tags.some((t) => t.toLowerCase() === needle);
-    });
-    let posts = matches.map(mapToPost);
-    posts = filterByDateRange(posts, options.dateRange);
-    return paginateArray(posts, options);
+    const pool = await fetchTagPool();
+    let posts = pool.map(mapToPost);
+    if (options.dateRange) posts = filterByDateRange(posts, options.dateRange);
+    return { items: posts, hasMore: false, total: posts.length };
   }
 
   async getPost(urlOrId: string): Promise<Post> {

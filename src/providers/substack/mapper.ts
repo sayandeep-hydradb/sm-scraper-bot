@@ -55,6 +55,7 @@ export function mapToAuthor(item: SubstackItem): Author {
 
 function normalizeDate(value: unknown): string | undefined {
   if (!value) return undefined;
+  if (typeof value === 'number') return new Date(value < 1e12 ? value * 1000 : value).toISOString();
   const parsed = new Date(String(value));
   return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
 }

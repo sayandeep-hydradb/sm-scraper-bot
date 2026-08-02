@@ -10,7 +10,7 @@ const OUTPUT_PATH = resolve('output/daily-scraper-result.json');
 const XLSX_OUTPUT_PATH = resolve('output/daily-scraper-result.xlsx');
 
 async function main(): Promise<void> {
-  const posts = await runDailyScraper();
+  const { posts, platformErrors } = await runDailyScraper();
   const json = JSON.stringify(posts, null, 2);
 
   mkdirSync(dirname(OUTPUT_PATH), { recursive: true });
@@ -19,7 +19,7 @@ async function main(): Promise<void> {
   const xlsx = await buildXlsxReport(posts);
   writeFileSync(XLSX_OUTPUT_PATH, xlsx);
 
-  await sendSlackNotification(posts).catch((err) => {
+  await sendSlackNotification(posts, platformErrors).catch((err) => {
     console.error('Slack notification error (non-fatal):', err instanceof Error ? err.message : err);
   });
 
