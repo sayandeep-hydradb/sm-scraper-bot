@@ -42,7 +42,10 @@ function formatDateTime(): string {
   );
 }
 
-export async function sendSlackNotification(posts: ScoredPost[]): Promise<void> {
+export async function sendSlackNotification(
+  posts: ScoredPost[],
+  platformErrors?: Map<Platform, number>,
+): Promise<void> {
   const webhookUrl = config.slack.webhookUrl;
   if (!webhookUrl) {
     logger.info('SLACK_WEBHOOK_URL not set, skipping Slack notification');
@@ -54,9 +57,15 @@ export async function sendSlackNotification(posts: ScoredPost[]): Promise<void> 
     countByPlatform.set(post.platform, (countByPlatform.get(post.platform) ?? 0) + 1);
   }
 
-  const platformSummary = [...countByPlatform.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .map(([p, n]) => `${PLATFORM_EMOJI[p]} *${PLATFORM_LABEL[p]}:* ${n}`)
+  const allPlatforms = new Set([...countByPlatform.keys(), ...(platformErrors?.keys() ?? [])]);
+  const platformSummary = [...allPlatforms]
+    .sort((a, b) => (countByPlatform.get(b) ?? 0) - (countByPlatform.get(a) ?? 0))
+    .map((p) => {
+      const count = countByPlatform.get(p) ?? 0;
+      const errors = platformErrors?.get(p) ?? 0;
+      const errSuffix = errors > 0 ? ` _(⚠️ ${errors} errors)_` : '';
+      return `${PLATFORM_EMOJI[p]} *${PLATFORM_LABEL[p]}:* ${count}${errSuffix}`;
+    })
     .join('   ');
 
   const top10 = posts.slice(0, 10);

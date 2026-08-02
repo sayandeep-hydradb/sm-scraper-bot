@@ -11,6 +11,12 @@ import { scorePost, type ScoredPost } from './scoring.js';
 
 export type { ScoredPost } from './scoring.js';
 
+export interface DailyScrapeResult {
+  posts: ScoredPost[];
+  /** Number of keyword-level errors per platform; only populated for platforms that had failures. */
+  platformErrors: Map<Platform, number>;
+}
+
 const logger = new Logger('daily-scraper', config.logLevel);
 const redditProvider = new RedditProvider();
 
@@ -53,15 +59,15 @@ async function runRedditScraper(): Promise<Post[]> {
 }
 
 /** Runs every configured keyword search for one platform, tolerating per-keyword failures. */
-async function runPlatformScraper(platform: Platform): Promise<Post[]> {
+async function runPlatformScraper(platform: Platform): Promise<{ posts: Post[]; errors: number }> {
   logger.info('scraper started', { platform });
 
   if (platform === 'reddit') {
     const posts = await runRedditScraper();
-    logger.info('scraper completed', { platform, postsCollected: posts.length });
-    return posts;
+    return { posts, errors: 0 };
   }
 
+  let errors = 0;
   const results = await mapWithConcurrency(scraperConfig.keywords, KEYWORD_CONCURRENCY, async (keyword) => {
     try {
       const { items } = await scraperService.search(platform, {
@@ -71,6 +77,7 @@ async function runPlatformScraper(platform: Platform): Promise<Post[]> {
       });
       return items;
     } catch (error) {
+      errors++;
       logger.error('scraper failed', {
         platform,
         keyword,
@@ -79,10 +86,8 @@ async function runPlatformScraper(platform: Platform): Promise<Post[]> {
       return [];
     }
   });
-  const collected = results.flat();
 
-  logger.info('scraper completed', { platform, postsCollected: collected.length });
-  return collected;
+  return { posts: results.flat(), errors };
 }
 
 /**
@@ -91,21 +96,31 @@ async function runPlatformScraper(platform: Platform): Promise<Post[]> {
  * the last `lookbackHours`, scores posts against configured keywords, and
  * returns them sorted by relevance score.
  */
-export async function runDailyScraper(): Promise<ScoredPost[]> {
+export async function runDailyScraper(): Promise<DailyScrapeResult> {
   const platforms = enabledPlatforms();
 
-  const perPlatformResults = await mapWithConcurrency(platforms, platforms.length, async (platform) => {
-    try {
-      return await runPlatformScraper(platform);
-    } catch (error) {
-      logger.error('scraper crashed', {
-        platform,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return [];
-    }
-  });
-  const allPosts = perPlatformResults.flat();
+  const perPlatformResults = await mapWithConcurrency(
+    platforms,
+    platforms.length,
+    async (platform): Promise<{ platform: Platform; posts: Post[]; errors: number }> => {
+      try {
+        const { posts, errors } = await runPlatformScraper(platform);
+        logger.info('scraper completed', { platform, postsCollected: posts.length, errors });
+        return { platform, posts, errors };
+      } catch (error) {
+        logger.error('scraper crashed', {
+          platform,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return { platform, posts: [], errors: scraperConfig.keywords.length };
+      }
+    },
+  );
+
+  const allPosts = perPlatformResults.flatMap((r) => r.posts);
+  const platformErrors = new Map(
+    perPlatformResults.filter((r) => r.errors > 0).map((r) => [r.platform, r.errors] as const),
+  );
 
   logger.info('collection complete', { totalPostsCollected: allPosts.length });
 
@@ -127,5 +142,5 @@ export async function runDailyScraper(): Promise<ScoredPost[]> {
 
   logger.info('daily scraper finished', { finalPostCount: capped.length });
 
-  return capped;
+  return { posts: capped, platformErrors };
 }
