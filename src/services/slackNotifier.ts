@@ -117,3 +117,56 @@ export async function sendSlackNotification(
     logger.info('Slack notification sent', { postsIncluded: top10.length, totalPosts: posts.length });
   }
 }
+
+export async function uploadXlsxToSlack(xlsxBuffer: Buffer, filename: string): Promise<void> {
+  const { botToken, channelId } = config.slack;
+  if (!botToken || !channelId) {
+    logger.info('SLACK_BOT_TOKEN or SLACK_CHANNEL_ID not set, skipping xlsx upload');
+    return;
+  }
+
+  // Step 1: get an upload URL from Slack
+  const urlRes = await fetch('https://slack.com/api/files.getUploadURLExternal', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${botToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ filename, length: xlsxBuffer.length }),
+  });
+  const urlData = (await urlRes.json()) as { ok: boolean; upload_url?: string; file_id?: string; error?: string };
+  if (!urlData.ok || !urlData.upload_url || !urlData.file_id) {
+    logger.error('Failed to get Slack upload URL', { error: urlData.error });
+    return;
+  }
+
+  // Step 2: upload the file content
+  const uploadRes = await fetch(urlData.upload_url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: xlsxBuffer,
+  });
+  if (!uploadRes.ok) {
+    logger.error('Slack file upload failed', { status: uploadRes.status });
+    return;
+  }
+
+  // Step 3: complete the upload and share to the channel
+  const completeRes = await fetch('https://slack.com/api/files.completeUploadExternal', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${botToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      files: [{ id: urlData.file_id, title: filename }],
+      channel_id: channelId,
+    }),
+  });
+  const completeData = (await completeRes.json()) as { ok: boolean; error?: string };
+  if (!completeData.ok) {
+    logger.error('Failed to complete Slack file upload', { error: completeData.error });
+  } else {
+    logger.info('Xlsx report uploaded to Slack', { filename });
+  }
+}

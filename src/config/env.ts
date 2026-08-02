@@ -45,6 +45,8 @@ export const config = {
   },
   slack: {
     webhookUrl: process.env.SLACK_WEBHOOK_URL ?? '',
+    botToken: process.env.SLACK_BOT_TOKEN ?? '',
+    channelId: process.env.SLACK_CHANNEL_ID ?? '',
   },
   logLevel: (process.env.LOG_LEVEL as LogLevel) || 'info',
 };
