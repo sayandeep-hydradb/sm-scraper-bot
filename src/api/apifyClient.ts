@@ -1,5 +1,5 @@
 import { config, requireApifyToken } from '../config/env.js';
-import { ApifyRunError, UpstreamRequestError } from '../core/errors.js';
+import { ApifyRunError, TimeoutError, UpstreamRequestError } from '../core/errors.js';
 import { RateLimiter } from '../utils/rateLimiter.js';
 import { withRetry, withTimeout } from '../utils/retry.js';
 import { Logger } from '../utils/logger.js';
@@ -49,6 +49,10 @@ export async function runActorAndGetItems<T = Record<string, unknown>>(options: 
   const url = new URL(`${config.apify.baseUrl}/acts/${actorPath}/run-sync-get-dataset-items`);
   url.searchParams.set('token', token);
   if (maxItems) url.searchParams.set('limit', String(maxItems));
+  // Optional hard cost ceiling per run (pay-per-event actors). 0/unset = no ceiling.
+  if (config.apify.maxTotalChargeUsd > 0) {
+    url.searchParams.set('maxTotalChargeUsd', String(config.apify.maxTotalChargeUsd));
+  }
 
   return withRetry(
     () =>
@@ -86,6 +90,10 @@ export async function runActorAndGetItems<T = Record<string, unknown>>(options: 
       label: `apify:${actorId}`,
       isRetryable: (error) => {
         if (error instanceof UpstreamRequestError) return isRetryableStatus(error.statusCode);
+        // A client-side timeout does NOT stop the actor run — it keeps executing
+        // and billing on Apify's side. Retrying would start a SECOND paid run for
+        // the same work, so timeouts are treated as terminal, not retryable.
+        if (error instanceof TimeoutError) return false;
         return true;
       },
     },

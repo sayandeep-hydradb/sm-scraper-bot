@@ -108,25 +108,38 @@ export class RedditProvider implements ScraperProvider {
 
   /**
    * Pulls recent posts directly from named subreddits (sorted by New), instead of
-   * keyword search. Reddit's keyword search caps out around ~1,000 results and its
-   * comment index is degraded, whereas a named subreddit sorted by New pages through
-   * its full history — so this is the recommended way to get volume from this actor.
-   * Relevance filtering happens later in the pipeline via keyword scoring.
+   * keyword search — a subreddit's New feed pages through its full history, whereas
+   * Reddit keyword search caps out around ~1,000 results. Relevance filtering happens
+   * later in the pipeline via keyword/LLM scoring.
+   *
+   * Uses `startUrls` (each subreddit's /new/ page) rather than a `subreddits` array
+   * so it works with the cheaper `trudax/reddit-scraper-lite` actor, whose schema
+   * exposes `startUrls`/`searches` but not `subreddits`.
    */
   async fetchFromSubreddits(subreddits: string[], options: { lookbackHours?: number; maxItems?: number } = {}): Promise<Post[]> {
     if (subreddits.length === 0) return [];
-    const maxItems = options.maxItems ?? 300;
+    const maxItems = options.maxItems ?? 200;
+    const startUrls = subreddits.map((sub) => ({ url: `https://www.reddit.com/r/${sub}/new/` }));
     const items = await runReddit(
       {
-        subreddits,
+        startUrls,
         sort: 'new',
         postDateLimit: options.lookbackHours ? `${options.lookbackHours} hours` : undefined,
         maxItems,
-        skipCommunityInfo: true,
+        maxPostCount: maxItems,
         skipComments: true,
+        skipCommunity: true,
       },
       maxItems,
     );
-    return items.filter((item) => item['recordType'] === 'post').map(mapToPost);
+    // Keep only post records. The Lite actor may omit `recordType`, so treat
+    // "has a title" as the post signal and exclude explicit non-post records.
+    return items
+      .filter((item) => {
+        const recordType = item['recordType'];
+        if (recordType && recordType !== 'post') return false;
+        return typeof item['title'] === 'string' && (item['title'] as string).length > 0;
+      })
+      .map(mapToPost);
   }
 }

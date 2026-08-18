@@ -43,11 +43,12 @@ jobs:
         env:
           APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
           DEVTO_API_KEY: ${{ secrets.DEVTO_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           REDDIT_ACTOR_ID: ${{ secrets.REDDIT_ACTOR_ID }}
           TWITTER_ACTOR_ID: ${{ secrets.TWITTER_ACTOR_ID }}
-          MEDIUM_ACTOR_ID: ${{ secrets.MEDIUM_ACTOR_ID }}
-          SUBSTACK_ACTOR_ID: ${{ secrets.SUBSTACK_ACTOR_ID }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
           LOG_LEVEL: info
         run: npm run scrape
 
