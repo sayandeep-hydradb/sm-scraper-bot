@@ -15,6 +15,9 @@ const COLUMNS: Array<{ header: string; key: string; width: number }> = [
   { header: 'Title', key: 'title', width: 60 },
   { header: 'URL', key: 'url', width: 50 },
   { header: 'Author', key: 'author', width: 25 },
+  { header: 'Relevance', key: 'relevance', width: 11 },
+  { header: 'Why', key: 'why', width: 45 },
+  { header: 'Suggested Follow-up', key: 'followUp', width: 45 },
   { header: 'Score', key: 'score', width: 10 },
   { header: 'Matched Keywords', key: 'matchedKeywords', width: 35 },
   { header: 'Published At', key: 'publishedAt', width: 22 },
@@ -39,11 +42,19 @@ export async function buildXlsxReport(posts: ScoredPost[]): Promise<Buffer> {
     sheet.getRow(1).font = { bold: true };
 
     const platformPosts = posts.filter((post) => post.platform === platform);
+    if (platformPosts.length === 0) {
+      const row = sheet.addRow({ title: '— no results in this run —' });
+      row.font = { italic: true, color: { argb: 'FF999999' } };
+      continue;
+    }
     for (const post of platformPosts) {
       sheet.addRow({
         title: post.title ?? '',
         url: post.url,
         author: post.author.displayName ?? post.author.username,
+        relevance: post.relevance ?? '',
+        why: post.reason ?? '',
+        followUp: post.followUp ?? '',
         score: Math.round(post.score * 100) / 100,
         matchedKeywords: post.matchedKeywords.join(', '),
         publishedAt: post.publishedAt ?? '',

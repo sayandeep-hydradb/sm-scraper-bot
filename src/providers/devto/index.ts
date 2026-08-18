@@ -2,17 +2,35 @@ import { getJson } from '../../api/httpClient.js';
 import { config } from '../../config/env.js';
 import type { ScraperProvider } from '../../core/interfaces.js';
 import { NotFoundError } from '../../core/errors.js';
-import type { Author, Comment, PaginatedResult, PaginationOptions, Post, SearchOptions } from '../../core/types.js';
+import type { Author, BatchSearchOptions, Comment, PaginatedResult, PaginationOptions, Post, SearchOptions } from '../../core/types.js';
 import { filterByDateRange } from '../../utils/filterAndSort.js';
 import { paginateArray } from '../../utils/pagination.js';
 import { flattenComments, mapToAuthor, mapToPost, type DevtoArticle, type DevtoComment, type DevtoFullUser } from './mapper.js';
 
 const { baseUrl, apiKey } = config.devto;
 
-// Dev.to tags that reliably surface content relevant to graph databases, AI memory, and RAG.
-// dev.to has no full-text search API, so we fetch recent articles by tag and let the
-// pipeline's keyword-scoring step determine relevance — same strategy as Reddit subreddits.
-const DEVTO_TAGS = ['database', 'ai', 'machinelearning', 'llm', 'rag', 'neo4j', 'vectordatabase', 'python'];
+// Dev.to tags that surface content relevant to graph databases, AI memory, and RAG.
+// dev.to has no full-text search API, so we fetch recent articles by tag (free) and let
+// the pipeline's keyword/LLM scoring determine relevance — same strategy as Reddit
+// subreddits. Unknown tags just return [] (harmless), so the list can be generous.
+const DEVTO_TAGS = [
+  'database',
+  'ai',
+  'machinelearning',
+  'llm',
+  'rag',
+  'neo4j',
+  'vectordatabase',
+  'knowledgegraph',
+  'genai',
+  'openai',
+  'embeddings',
+  'datascience',
+];
+
+// How many recent articles to pull per tag (free API). Higher = more candidates
+// for the relevance step to choose from.
+const PER_TAG_LIMIT = 60;
 
 // Cached per process run so 22 keyword calls share one set of HTTP fetches.
 let tagArticleCache: DevtoArticle[] | null = null;
@@ -25,7 +43,7 @@ async function fetchTagPool(): Promise<DevtoArticle[]> {
   if (tagArticleCache) return tagArticleCache;
   const perTag = await Promise.all(
     DEVTO_TAGS.map((tag) =>
-      getJson<DevtoArticle[]>(`${baseUrl}/articles?tag=${tag}&per_page=30`, {
+      getJson<DevtoArticle[]>(`${baseUrl}/articles?tag=${tag}&per_page=${PER_TAG_LIMIT}`, {
         platform: 'devto',
         headers: headers(),
       }).catch(() => [] as DevtoArticle[]),
@@ -74,6 +92,19 @@ export class DevtoProvider implements ScraperProvider {
     const pool = await fetchTagPool();
     let posts = pool.map(mapToPost);
     if (options.dateRange) posts = filterByDateRange(posts, options.dateRange);
+    return { items: posts, hasMore: false, total: posts.length };
+  }
+
+  /**
+   * dev.to has no full-text search, so keywords don't change what we fetch: this
+   * returns the shared tag pool once (trimmed to `limit`) instead of re-fetching
+   * per keyword. Relevance is decided later by keyword/LLM scoring.
+   */
+  async searchMany(_queries: string[], options?: BatchSearchOptions): Promise<PaginatedResult<Post>> {
+    const pool = await fetchTagPool();
+    let posts = pool.map(mapToPost);
+    if (options?.dateRange) posts = filterByDateRange(posts, options.dateRange);
+    if (options?.limit) posts = posts.slice(0, options.limit);
     return { items: posts, hasMore: false, total: posts.length };
   }
 

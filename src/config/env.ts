@@ -17,17 +17,28 @@ export const config = {
     apiToken: process.env.APIFY_API_TOKEN ?? '',
     baseUrl: 'https://api.apify.com/v2',
     pollIntervalMs: int('APIFY_POLL_INTERVAL_MS', 1500),
-    runTimeoutMs: int('APIFY_RUN_TIMEOUT_MS', 120_000),
+    // Matches Apify's own run-sync ceiling (300s). A shorter client timeout just
+    // abandons a run that keeps billing, so we never time out before Apify does.
+    runTimeoutMs: int('APIFY_RUN_TIMEOUT_MS', 300_000),
+    // Optional hard per-run cost ceiling in USD for pay-per-event actors. 0 = off.
+    maxTotalChargeUsd: int('APIFY_MAX_TOTAL_CHARGE_USD', 0),
   },
   actors: {
-    reddit: process.env.REDDIT_ACTOR_ID || 'trudax/reddit-scraper',
+    // Only Reddit and X/Twitter use Apify now — Medium and Substack were moved to
+    // free RSS. Lite = pay-per-result ($3.40/1k) with no monthly rental, unlike the
+    // full trudax/reddit-scraper ($45/mo + usage). Override via REDDIT_ACTOR_ID.
+    reddit: process.env.REDDIT_ACTOR_ID || 'trudax/reddit-scraper-lite',
     twitter: process.env.TWITTER_ACTOR_ID || 'apidojo/tweet-scraper',
-    medium: process.env.MEDIUM_ACTOR_ID || 'easyapi/medium-posts-search-scraper',
-    substack: process.env.SUBSTACK_ACTOR_ID || 'easyapi/substack-posts-scraper',
   },
   devto: {
     apiKey: process.env.DEVTO_API_KEY ?? '',
     baseUrl: 'https://dev.to/api',
+  },
+  openrouter: {
+    apiKey: process.env.OPENROUTER_API_KEY ?? '',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    // DeepSeek V3.2 is the cheapest capable option for relevance scoring.
+    model: process.env.OPENROUTER_MODEL || 'deepseek/deepseek-v3.2',
   },
   hackernews: {
     firebaseUrl: 'https://hacker-news.firebaseio.com/v0',
@@ -60,4 +71,9 @@ export function requireApifyToken(platform: string): string {
     );
   }
   return config.apify.apiToken;
+}
+
+/** True when an OpenRouter key is configured, so the LLM relevance step can run. */
+export function hasOpenRouterKey(): boolean {
+  return Boolean(config.openrouter.apiKey);
 }

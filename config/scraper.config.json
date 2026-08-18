@@ -36,12 +36,37 @@
     "maxItemsPerKeyword": 25,
     "sort": "new"
   },
+  "maxItemsPerPlatform": {
+    "twitter": 150,
+    "reddit": 200,
+    "hackernews": 150,
+    "devto": 200,
+    "medium": 120,
+    "substack": 120
+  },
   "reddit": {
     "subreddits": ["AI_Agents", "LLMDevs", "LocalLLaMA", "MachineLearning", "Rag", "selfhosted", "vectordatabase"],
-    "maxItems": 300
+    "maxItems": 200
+  },
+  "medium": {
+    "tags": ["graph-database", "knowledge-graph", "rag", "vector-database", "neo4j", "llm", "artificial-intelligence", "machine-learning"]
+  },
+  "substack": {
+    "publications": [
+      "https://thesequence.substack.com",
+      "https://cameronrwolfe.substack.com",
+      "https://magazine.sebastianraschka.com",
+      "https://blog.bytebytego.com",
+      "https://www.latent.space"
+    ]
   },
   "output": {
     "maxPostsPerPlatform": 75
+  },
+  "relevance": {
+    "enabled": true,
+    "threshold": 60,
+    "maxCandidatesPerPlatform": 40
   },
   "scoring": {
     "keywordMatchWeight": 10,

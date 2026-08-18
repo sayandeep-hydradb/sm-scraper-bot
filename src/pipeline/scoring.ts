@@ -5,6 +5,12 @@ import { engagementScore } from '../utils/filterAndSort.js';
 export interface ScoredPost extends Post {
   score: number;
   matchedKeywords: string[];
+  /** 0–100 relevance judged by the LLM step (undefined if the step was skipped). */
+  relevance?: number;
+  /** One-line rationale from the LLM for why this post matters. */
+  reason?: string;
+  /** One-line suggested follow-up action from the LLM. */
+  followUp?: string;
 }
 
 function recencyScore(post: Post, lookbackHours: number): number {

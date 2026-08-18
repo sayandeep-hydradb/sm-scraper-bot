@@ -42,9 +42,15 @@ function formatDateTime(): string {
   );
 }
 
+export interface PlatformStat {
+  collected: number;
+  kept: number;
+}
+
 export async function sendSlackNotification(
   posts: ScoredPost[],
   platformErrors?: Map<Platform, number>,
+  platformStats?: Map<Platform, PlatformStat>,
 ): Promise<void> {
   const webhookUrl = config.slack.webhookUrl;
   if (!webhookUrl) {
@@ -57,14 +63,22 @@ export async function sendSlackNotification(
     countByPlatform.set(post.platform, (countByPlatform.get(post.platform) ?? 0) + 1);
   }
 
-  const allPlatforms = new Set([...countByPlatform.keys(), ...(platformErrors?.keys() ?? [])]);
-  const platformSummary = [...allPlatforms]
+  // Show EVERY enabled platform (from stats), not just those with results, so a
+  // platform that produced 0 is visible — with its collected count to distinguish
+  // "fetched nothing" from "fetched but all filtered out".
+  const allPlatforms = platformStats
+    ? [...platformStats.keys()]
+    : [...new Set([...countByPlatform.keys(), ...(platformErrors?.keys() ?? [])])];
+  const platformSummary = allPlatforms
     .sort((a, b) => (countByPlatform.get(b) ?? 0) - (countByPlatform.get(a) ?? 0))
     .map((p) => {
-      const count = countByPlatform.get(p) ?? 0;
+      const kept = platformStats?.get(p)?.kept ?? countByPlatform.get(p) ?? 0;
+      const collected = platformStats?.get(p)?.collected;
       const errors = platformErrors?.get(p) ?? 0;
+      const collectedSuffix =
+        collected !== undefined && collected !== kept ? ` _(${collected} fetched)_` : '';
       const errSuffix = errors > 0 ? ` _(⚠️ ${errors} errors)_` : '';
-      return `${PLATFORM_EMOJI[p]} *${PLATFORM_LABEL[p]}:* ${count}${errSuffix}`;
+      return `${PLATFORM_EMOJI[p]} *${PLATFORM_LABEL[p]}:* ${kept}${collectedSuffix}${errSuffix}`;
     })
     .join('   ');
 
@@ -72,9 +86,13 @@ export async function sendSlackNotification(
   const postLines = top10
     .map((post, i) => {
       const title = truncate(post.title ?? post.content ?? 'Untitled', 80);
-      const keywords = post.matchedKeywords.slice(0, 3).join(', ');
-      const keywordBadge = keywords ? `  _${keywords}_` : '';
-      return `${i + 1}. ${PLATFORM_EMOJI[post.platform]} <${post.url}|${title}>${keywordBadge}  *(${post.score.toFixed(1)})*`;
+      const badge = post.relevance !== undefined ? `R:${post.relevance}` : post.score.toFixed(1);
+      const header = `${i + 1}. ${PLATFORM_EMOJI[post.platform]} <${post.url}|${title}>  *(${badge})*`;
+      // Second line carries the LLM's rationale + suggested action, when available.
+      const detail = post.reason
+        ? `\n     ↳ _${truncate(post.reason, 90)}_${post.followUp ? `  •  *Follow-up:* ${truncate(post.followUp, 70)}` : ''}`
+        : '';
+      return `${header}${detail}`;
     })
     .join('\n');
 

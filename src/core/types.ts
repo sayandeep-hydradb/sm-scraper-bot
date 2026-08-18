@@ -75,6 +75,9 @@ export interface SearchOptions extends PaginationOptions {
   dateRange?: DateRange;
 }
 
+/** Options for a batched, multi-keyword search — same as SearchOptions minus the single `query`. */
+export type BatchSearchOptions = Omit<SearchOptions, 'query'>;
+
 export interface PaginatedResult<T> {
   items: T[];
   nextCursor?: string;

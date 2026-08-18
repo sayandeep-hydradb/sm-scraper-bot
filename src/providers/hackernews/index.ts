@@ -2,7 +2,7 @@ import { getJson } from '../../api/httpClient.js';
 import { config } from '../../config/env.js';
 import type { ScraperProvider } from '../../core/interfaces.js';
 import { NotFoundError } from '../../core/errors.js';
-import type { Author, Comment, PaginatedResult, PaginationOptions, Post, SearchOptions } from '../../core/types.js';
+import type { Author, BatchSearchOptions, Comment, PaginatedResult, PaginationOptions, Post, SearchOptions } from '../../core/types.js';
 import { paginateArray } from '../../utils/pagination.js';
 import {
   mapAlgoliaHitToPost,
@@ -57,6 +57,35 @@ export class HackerNewsProvider implements ScraperProvider {
     );
     const items = result.hits.map(mapAlgoliaHitToPost);
     return { items, hasMore: (page + 1) * limit < result.nbHits, total: result.nbHits };
+  }
+
+  /**
+   * HN's Algolia search is per-query, so this fans out over the keywords (free
+   * API), merges, dedupes by id, and trims to `limit`. Kept for a uniform
+   * batched call site in the daily pipeline.
+   */
+  async searchMany(queries: string[], options?: BatchSearchOptions): Promise<PaginatedResult<Post>> {
+    if (queries.length === 0) return { items: [], hasMore: false, total: 0 };
+    const limit = options?.limit ?? 150;
+    const perKeyword = Math.min(30, Math.max(10, Math.ceil(limit / queries.length)));
+
+    const perQuery = await Promise.all(
+      queries.map((query) =>
+        this.search({ query, sort: options?.sort ?? 'new', dateRange: options?.dateRange, limit: perKeyword })
+          .then((r) => r.items)
+          .catch(() => [] as Post[]),
+      ),
+    );
+
+    const seen = new Set<string>();
+    const merged: Post[] = [];
+    for (const post of perQuery.flat()) {
+      const key = post.id || post.url;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(post);
+    }
+    return { items: merged.slice(0, limit), hasMore: false, total: merged.length };
   }
 
   async getPost(urlOrId: string): Promise<Post> {

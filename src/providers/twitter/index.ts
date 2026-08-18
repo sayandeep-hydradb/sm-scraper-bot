@@ -2,7 +2,7 @@ import { runActorAndGetItems } from '../../api/apifyClient.js';
 import { config } from '../../config/env.js';
 import type { ScraperProvider } from '../../core/interfaces.js';
 import { NotFoundError } from '../../core/errors.js';
-import type { Author, Comment, PaginatedResult, PaginationOptions, Post, SearchOptions } from '../../core/types.js';
+import type { Author, BatchSearchOptions, Comment, PaginatedResult, PaginationOptions, Post, SearchOptions } from '../../core/types.js';
 import { filterByDateRange, sortPosts } from '../../utils/filterAndSort.js';
 import { paginateArray } from '../../utils/pagination.js';
 import { mapToComment, mapToPost, type TweetItem } from './mapper.js';
@@ -37,6 +37,31 @@ export class TwitterProvider implements ScraperProvider {
     posts = filterByDateRange(posts, options.dateRange);
     posts = sortPosts(posts, options.sort);
     return paginateArray(posts, options);
+  }
+
+  /**
+   * Batches every keyword into ONE actor run (the actor accepts a `searchTerms`
+   * array), instead of one run per keyword. `maxItems` caps the whole run and
+   * `start` bounds it to the lookback window, so cost stays flat regardless of
+   * how many keywords are configured.
+   */
+  async searchMany(queries: string[], options?: BatchSearchOptions): Promise<PaginatedResult<Post>> {
+    if (queries.length === 0) return { items: [], hasMore: false, total: 0 };
+    const limit = options?.limit ?? 150;
+    const items = await runTwitter(
+      {
+        searchTerms: queries,
+        maxItems: limit,
+        sort: options?.sort === 'new' ? 'Latest' : 'Top',
+        ...(options?.dateRange?.from ? { start: options.dateRange.from.slice(0, 10) } : {}),
+        ...(options?.dateRange?.to ? { end: options.dateRange.to.slice(0, 10) } : {}),
+      },
+      limit,
+    );
+    let posts = items.map(mapToPost);
+    posts = filterByDateRange(posts, options?.dateRange);
+    posts = sortPosts(posts, options?.sort);
+    return { items: posts, hasMore: false, total: posts.length };
   }
 
   async getPost(urlOrId: string): Promise<Post> {

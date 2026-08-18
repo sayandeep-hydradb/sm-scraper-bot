@@ -11,12 +11,27 @@ export interface ScraperConfig {
     maxItemsPerKeyword: number;
     sort: SortOrder;
   };
+  /** Hard per-platform ceiling on how many items to SCRAPE per run (what we pay for). */
+  maxItemsPerPlatform?: Partial<Record<Platform, number>>;
   reddit?: {
     subreddits: string[];
     maxItems: number;
   };
+  /** RSS-backed providers: which feeds to pull (no Apify cost). */
+  medium?: {
+    tags: string[];
+  };
+  substack?: {
+    publications: string[];
+  };
   output?: {
     maxPostsPerPlatform: number;
+  };
+  /** LLM relevance filtering + enrichment via OpenRouter. */
+  relevance?: {
+    enabled: boolean;
+    threshold: number;
+    maxCandidatesPerPlatform: number;
   };
   scoring: {
     keywordMatchWeight: number;

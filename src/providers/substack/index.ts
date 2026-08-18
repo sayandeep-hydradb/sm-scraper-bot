@@ -1,74 +1,121 @@
-import { runActorAndGetItems } from '../../api/apifyClient.js';
-import { config } from '../../config/env.js';
+import { getText } from '../../api/httpClient.js';
+import { scraperConfig } from '../../config/scraperConfig.js';
 import type { ScraperProvider } from '../../core/interfaces.js';
 import { NotFoundError } from '../../core/errors.js';
-import type { Author, Comment, PaginatedResult, PaginationOptions, Post, SearchOptions } from '../../core/types.js';
+import type {
+  Author,
+  BatchSearchOptions,
+  Comment,
+  PaginatedResult,
+  PaginationOptions,
+  Post,
+  SearchOptions,
+} from '../../core/types.js';
 import { filterByDateRange, sortPosts } from '../../utils/filterAndSort.js';
 import { paginateArray } from '../../utils/pagination.js';
-import { mapToAuthor, mapToPost, type SubstackItem } from './mapper.js';
+import { parseFeed, stripHtml, RSS_HEADERS, type RssItem } from '../../utils/rss.js';
 
-const ACTOR_ID = config.actors.substack;
+// Substack has no global keyword search, but every publication exposes a free RSS
+// feed at <publication>/feed. We poll a curated list from config; the pipeline's
+// keyword/LLM scoring decides relevance. An empty list => the platform is skipped
+// cleanly (returns nothing rather than erroring).
+function configuredPublications(): string[] {
+  return scraperConfig.substack?.publications ?? [];
+}
 
-async function runSubstack(input: Record<string, unknown>, maxItems?: number): Promise<SubstackItem[]> {
-  return runActorAndGetItems<SubstackItem>({ platform: 'substack', actorId: ACTOR_ID, input, maxItems });
+function feedUrl(publication: string): string {
+  const base = publication.replace(/\/+$/, '');
+  return /\/feed$/.test(base) ? base : `${base}/feed`;
+}
+
+function publicationHost(publication: string): string {
+  try {
+    return new URL(publication).host;
+  } catch {
+    return publication;
+  }
+}
+
+function toPost(item: RssItem, publication: string): Post {
+  return {
+    id: item.id || item.link,
+    platform: 'substack',
+    url: item.link,
+    title: item.title || undefined,
+    content: stripHtml(item.contentHtml),
+    author: { username: item.author ?? publicationHost(publication) },
+    publishedAt: item.publishedAt,
+    tags: item.categories,
+    engagement: {},
+    raw: item,
+  };
+}
+
+async function fetchPublicationFeed(publication: string): Promise<Post[]> {
+  try {
+    const xml = await getText(feedUrl(publication), { platform: 'substack', headers: RSS_HEADERS });
+    return parseFeed(xml).map((item) => toPost(item, publication));
+  } catch {
+    return [];
+  }
+}
+
+/** Fetches every configured publication feed once and dedupes by URL. */
+async function fetchPool(): Promise<Post[]> {
+  const publications = configuredPublications();
+  if (publications.length === 0) return [];
+  const perPub = await Promise.all(publications.map(fetchPublicationFeed));
+  const seen = new Set<string>();
+  const pool: Post[] = [];
+  for (const post of perPub.flat()) {
+    const key = post.url || post.id;
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
+    pool.push(post);
+  }
+  return pool;
 }
 
 export class SubstackProvider implements ScraperProvider {
   readonly platform = 'substack' as const;
 
   async search(options: SearchOptions): Promise<PaginatedResult<Post>> {
-    const limit = options.limit ?? 25;
-    const items = await runSubstack({ searchTerms: [options.query], maxItems: limit }, limit);
-    let posts = items.map(mapToPost);
+    let posts = await fetchPool();
     posts = filterByDateRange(posts, options.dateRange);
     posts = sortPosts(posts, options.sort);
     return paginateArray(posts, options);
   }
 
-  async getPost(urlOrId: string): Promise<Post> {
-    if (!urlOrId.startsWith('http')) {
-      throw new NotFoundError('substack', `post "${urlOrId}" (Substack posts must be referenced by full URL)`);
-    }
-    const items = await runSubstack({ startUrls: [{ url: urlOrId }], maxItems: 1 }, 1);
-    if (items.length === 0) throw new NotFoundError('substack', `post "${urlOrId}"`);
-    return mapToPost(items[0]);
-  }
-
-  /** Best-effort: comment support depends entirely on the configured actor; degrades to empty. */
-  async getComments(postUrlOrId: string, options?: PaginationOptions): Promise<PaginatedResult<Comment>> {
-    const limit = options?.limit ?? 25;
-    const items = await runSubstack({ startUrls: [{ url: postUrlOrId }], scrapeComments: true, maxItems: limit }, limit);
-    const comments: Comment[] = items
-      .filter((item) => item['content'] || item['text'] || item['body'])
-      .map((item) => ({
-        id: String(item['id'] ?? ''),
-        postId: postUrlOrId,
-        platform: 'substack' as const,
-        content: String(item['content'] ?? item['text'] ?? item['body'] ?? ''),
-        author: mapToAuthor(item),
-        engagement: {},
-        raw: item,
-      }));
-    return paginateArray(comments, options);
-  }
-
-  async getAuthor(usernameOrUrl: string): Promise<Author> {
-    const url = usernameOrUrl.startsWith('http') ? usernameOrUrl : `https://${usernameOrUrl}.substack.com`;
-    const items = await runSubstack({ startUrls: [{ url }], maxItems: 1 }, 1);
-    if (items.length === 0) throw new NotFoundError('substack', `publication "${usernameOrUrl}"`);
-    return mapToAuthor(items[0]);
-  }
-
-  /** Approximated via Substack's Discover page - there is no single global "trending" API. */
-  async getTrending(options?: PaginationOptions): Promise<PaginatedResult<Post>> {
-    const limit = options?.limit ?? 25;
-    const items = await runSubstack({ startUrls: [{ url: 'https://substack.com/discover' }], maxItems: limit }, limit);
-    return paginateArray(items.map(mapToPost), options);
+  /** Substack RSS has no per-keyword query, so this returns the shared publication pool once. */
+  async searchMany(_queries: string[], options?: BatchSearchOptions): Promise<PaginatedResult<Post>> {
+    let posts = await fetchPool();
+    if (options?.dateRange) posts = filterByDateRange(posts, options.dateRange);
+    posts = sortPosts(posts, options?.sort);
+    if (options?.limit) posts = posts.slice(0, options.limit);
+    return { items: posts, hasMore: false, total: posts.length };
   }
 
   async getLatest(options?: PaginationOptions): Promise<PaginatedResult<Post>> {
-    const limit = options?.limit ?? 25;
-    const items = await runSubstack({ startUrls: [{ url: 'https://substack.com/discover' }], sort: 'new', maxItems: limit }, limit);
-    return paginateArray(items.map(mapToPost), options);
+    const posts = sortPosts(await fetchPool(), 'new');
+    return paginateArray(posts, options);
+  }
+
+  /** No global trending feed; approximate with the latest pool across configured publications. */
+  async getTrending(options?: PaginationOptions): Promise<PaginatedResult<Post>> {
+    return this.getLatest(options);
+  }
+
+  async getAuthor(usernameOrUrl: string): Promise<Author> {
+    const base = usernameOrUrl.startsWith('http') ? usernameOrUrl : `https://${usernameOrUrl}.substack.com`;
+    return { username: publicationHost(base), url: base };
+  }
+
+  async getPost(urlOrId: string): Promise<Post> {
+    throw new NotFoundError('substack', `post "${urlOrId}" (RSS-backed Substack provider only exposes feeds, not single posts)`);
+  }
+
+  /** Substack RSS feeds don't expose comments; degrade to an empty page. */
+  async getComments(): Promise<PaginatedResult<Comment>> {
+    return { items: [], hasMore: false };
   }
 }
